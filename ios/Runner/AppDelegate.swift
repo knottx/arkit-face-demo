@@ -12,33 +12,36 @@ import UIKit
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        let modelPath = Bundle.main.path(forResource: "OULU_Protocol_2_model_0_0", ofType: "onnx")!
-        
-        do {
-            let ortEny = try ORTEnv(loggingLevel: .warning)
-            ortSession = try ORTSession(env: ortEny, modelPath: modelPath, sessionOptions: nil)
-        } catch {
-            print(error);
-        }
-
         let controller = window?.rootViewController as! FlutterViewController
-        methodChannel = FlutterMethodChannel(name: "onnx", binaryMessenger: controller.binaryMessenger)
+        let registrar = controller.registrar(forPlugin: "ARViewFactory")
+        registrar!.register(ARViewFactory(messenger: controller.binaryMessenger), withId: "ar_view")
+        //        methodChannel = FlutterMethodChannel(name: "onnx", binaryMessenger: controller.binaryMessenger)
 
-        methodChannel?.setMethodCallHandler { call, result in
-            if call.method == "processImage" {
-                guard let args = call.arguments as? [String: Any],
-                      let imageData = args["image"] as? FlutterStandardTypedData
-                else {
-                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid image data", details: nil))
-                    return
-                }
-
-                self.runOnnxModel(imageData.data)
-
-            } else {
-                result(FlutterMethodNotImplemented)
-            }
-        }
+//        let modelPath = Bundle.main.path(forResource: "OULU_Protocol_2_model_0_0", ofType: "onnx")!
+//
+//        do {
+//            let ortEny = try ORTEnv(loggingLevel: .warning)
+//            ortSession = try ORTSession(env: ortEny, modelPath: modelPath, sessionOptions: nil)
+//        } catch {
+//            print(error);
+//        }
+//
+//
+//        methodChannel?.setMethodCallHandler { call, result in
+//            if call.method == "processImage" {
+//                guard let args = call.arguments as? [String: Any],
+//                      let imageData = args["image"] as? FlutterStandardTypedData
+//                else {
+//                    result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid image data", details: nil))
+//                    return
+//                }
+//
+//                self.runOnnxModel(imageData.data)
+//
+//            } else {
+//                result(FlutterMethodNotImplemented)
+//            }
+//        }
 
         GeneratedPluginRegistrant.register(with: self)
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
@@ -53,7 +56,6 @@ import UIKit
                                               outputNames: ["output_pixel"],
                                               runOptions: nil)
 
-           
             print(outputs)
             methodChannel?.invokeMethod("processImage", arguments: outputs?.description ?? "")
         } catch {
