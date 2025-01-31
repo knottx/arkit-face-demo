@@ -11,14 +11,14 @@ class AppTextStyle {
         fontSize: fontSize,
       );
 
-  /// SemiBold
-  static TextStyle w600(double fontSize) => _base.copyWith(
-        fontWeight: FontWeight.w600,
+  /// Bold
+  static TextStyle w700(double fontSize) => _base.copyWith(
+        fontWeight: FontWeight.w700,
         fontSize: fontSize,
       );
 }
 
 extension TextStyleExtension on TextStyle {
   TextStyle get colorWhite => copyWith(color: Colors.white);
-  TextStyle get colorLightGreen => copyWith(color: Colors.lightGreen);
+  TextStyle get colorGreen => copyWith(color: Colors.green);
 }

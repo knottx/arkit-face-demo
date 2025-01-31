@@ -96,14 +96,14 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            const ARCameraView(),
-            Align(
-              alignment: Alignment.topCenter,
+      body: Stack(
+        children: [
+          const ARCameraView(),
+          Align(
+            alignment: Alignment.topCenter,
+            child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.only(top: 50.0),
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   spacing: 4,
                   mainAxisSize: MainAxisSize.min,
@@ -111,25 +111,25 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
                     Text(
                       'Left Eye Blink: ${_leftEyeBlink.toStringAsFixed(6)}',
                       style: _leftEyeBlink > 0.8
-                          ? AppTextStyle.w600(16).colorLightGreen
+                          ? AppTextStyle.w700(16).colorGreen
                           : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Right Eye Blink: ${_rightEyeBlink.toStringAsFixed(6)}',
                       style: _rightEyeBlink > 0.8
-                          ? AppTextStyle.w600(16).colorLightGreen
+                          ? AppTextStyle.w700(16).colorGreen
                           : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Eye Look In Left: ${_eyeLookInLeft.toStringAsFixed(6)}',
                       style: _eyeLookInLeft > 0.8
-                          ? AppTextStyle.w600(16).colorLightGreen
+                          ? AppTextStyle.w700(16).colorGreen
                           : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Eye Look In Right: ${_eyeLookInRight.toStringAsFixed(6)}',
                       style: _eyeLookInRight > 0.8
-                          ? AppTextStyle.w600(16).colorLightGreen
+                          ? AppTextStyle.w700(16).colorGreen
                           : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
@@ -152,16 +152,16 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
                 ),
               ),
             ),
-            if (_currentFaceImage != null)
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Image.memory(
-                  _currentFaceImage!,
-                ),
+          ),
+          if (_currentFaceImage != null)
+            Positioned(
+              bottom: 0,
+              right: 0,
+              child: Image.memory(
+                _currentFaceImage!,
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

@@ -28,13 +28,17 @@ class ARViewFactory: NSObject, FlutterPlatformViewFactory {
 }
 
 class ARView: NSObject, FlutterPlatformView {
-    var ortSession: ORTSession?
+    private var ortSession: ORTSession?
 
-    var sceneView: ARSCNView
-    var faceLivenessChannel: FlutterMethodChannel
-    var onnxChannel: FlutterMethodChannel
+    private var sceneView: ARSCNView
+    private var faceLivenessChannel: FlutterMethodChannel
+    private var onnxChannel: FlutterMethodChannel
+
+    private let ciContext = CIContext()
 
     // Flag to track ONNX processing state
+    private var lastProcessTime: TimeInterval = 0
+    private let processInterval: TimeInterval = 0.25
     private var isProcessing: Bool = false
 
     init(frame: CGRect, messenger: FlutterBinaryMessenger) {
@@ -63,10 +67,12 @@ class ARView: NSObject, FlutterPlatformView {
         guard let modelPath = Bundle.main.path(forResource: "OULU_Protocol_2_model_0_0", ofType: "onnx") else { return }
 
         do {
-            let ortEny = try ORTEnv(loggingLevel: .warning)
-            ortSession = try ORTSession(env: ortEny, modelPath: modelPath, sessionOptions: nil)
+            let ortEnv = try ORTEnv(loggingLevel: .warning)
+            let sessionOptions = try ORTSessionOptions()
+            try sessionOptions.setIntraOpNumThreads(1) // Limit to 1 CPU thread
+            ortSession = try ORTSession(env: ortEnv, modelPath: modelPath, sessionOptions: sessionOptions)
         } catch {
-            print(error)
+            print("ONNX model setup error: \(error)")
         }
     }
 }
@@ -87,37 +93,30 @@ extension ARView: ARSessionDelegate {
             }
         }
 
-        // Only process if not already processing
+        let currentTime = CACurrentMediaTime()
+        guard currentTime - lastProcessTime > processInterval else { return }
+        lastProcessTime = currentTime
+
+        guard !isProcessing else { return }
+        isProcessing = true
+
+        let pixelBuffer = frame.capturedImage
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            // Check if the model is already being processed
-            if self.isProcessing { return }
-
-            // Set the flag to true to indicate processing
-            self.isProcessing = true
-
-            // Extract pixel buffer from ARFrame
-            let pixelBuffer = frame.capturedImage
-
-            // Convert the pixel buffer to UIImage and run ONNX model
-            if let image = self.convertPixelBufferToUIImage(pixelBuffer),
-               let imageData = image.jpegData(compressionQuality: 1)
-            {
-                // Run the ONNX model asynchronously
+            if let imageData = self.convertPixelBufferToData(pixelBuffer) {
                 self.runOnnxModel(imageData)
+            } else {
+                DispatchQueue.main.async { self.isProcessing = false }
             }
         }
     }
 
-    func convertPixelBufferToUIImage(_ pixelBuffer: CVPixelBuffer) -> UIImage? {
+    func convertPixelBufferToData(_ pixelBuffer: CVPixelBuffer) -> Data? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
-            return UIImage(cgImage: cgImage)
-        } else {
-            return nil
-        }
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        return UIImage(cgImage: cgImage).jpegData(compressionQuality: 1)
     }
 
     func runOnnxModel(_ imageData: Data) {
@@ -125,23 +124,19 @@ extension ARView: ARSessionDelegate {
             let inputTensor = try ORTValue(tensorData: NSMutableData(data: imageData),
                                            elementType: .float,
                                            shape: [1, 3, 224, 224])
+
             let outputs = try ortSession?.run(withInputs: ["input": inputTensor],
                                               outputNames: ["output_pixel"],
                                               runOptions: nil)
 
-            print(outputs)
-
-            // Invoke method back on the main thread
             DispatchQueue.main.async { [weak self] in
+                print(outputs)
                 self?.onnxChannel.invokeMethod("processImage", arguments: outputs?.description ?? "")
+                self?.isProcessing = false
             }
         } catch {
             print("ONNX model error: \(error)")
-        }
-
-        // Once done processing, set the flag to false
-        DispatchQueue.main.async { [weak self] in
-            self?.isProcessing = false
+            DispatchQueue.main.async { self.isProcessing = false }
         }
     }
 }
