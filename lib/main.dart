@@ -1,3 +1,4 @@
+import 'package:arkit_face_demo/app_text_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -109,35 +110,43 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
                   children: [
                     Text(
                       'Left Eye Blink: ${_leftEyeBlink.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: _leftEyeBlink > 0.8
+                          ? AppTextStyle.w600(16).colorLightGreen
+                          : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Right Eye Blink: ${_rightEyeBlink.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: _rightEyeBlink > 0.8
+                          ? AppTextStyle.w600(16).colorLightGreen
+                          : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Eye Look In Left: ${_eyeLookInLeft.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: _eyeLookInLeft > 0.8
+                          ? AppTextStyle.w600(16).colorLightGreen
+                          : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Eye Look In Right: ${_eyeLookInRight.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: _eyeLookInRight > 0.8
+                          ? AppTextStyle.w600(16).colorLightGreen
+                          : AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Std.Dev Depth: ${_stdDevDepth.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Ambient Intensity: ${_ambientIntensity.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Ambient Color Temperature: ${_ambientColorTemperature.toStringAsFixed(6)}',
-                      style: TextStyle(color: Colors.white),
+                      style: AppTextStyle.w400(16).colorWhite,
                     ),
                     Text(
                       'Process Image Result: $_processImageResult',
-                      style: TextStyle(color: Colors.white),
+                      style: AppTextStyle.w400(16).colorWhite,
                     ),
                   ],
                 ),
