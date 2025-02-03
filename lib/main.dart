@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -34,13 +35,14 @@ class FaceTrackingPage extends StatefulWidget {
 }
 
 class _FaceTrackingPageState extends State<FaceTrackingPage> {
-  static const MethodChannel _faceLivenessChannel =
-      MethodChannel('face_liveness');
+  static const MethodChannel _faceLivenessChannel = MethodChannel('face_liveness');
   static const MethodChannel _onnxChannel = MethodChannel('onnx');
 
   final FaceDetector _faceDetector = FaceDetector(
     options: FaceDetectorOptions(),
   );
+
+  DateTime? _lastProcessAt;
 
   final _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -85,9 +87,7 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
       frontCamera,
       ResolutionPreset.high,
       enableAudio: false,
-      imageFormatGroup: Platform.isAndroid
-          ? ImageFormatGroup.nv21
-          : ImageFormatGroup.bgra8888,
+      imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.nv21 : ImageFormatGroup.bgra8888,
     );
 
     await _cameraController?.initialize();
@@ -109,6 +109,13 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
     if (_isBusy) return;
     _isBusy = true;
 
+    final lastProcessAt = _lastProcessAt;
+    if (lastProcessAt != null) {
+      final now = DateTime.now();
+      if (lastProcessAt.difference(now).inMilliseconds.abs() < 100) return;
+      _lastProcessAt = now;
+    }
+
     final sensorOrientation = camera.sensorOrientation;
 
     InputImageRotation? rotation;
@@ -116,8 +123,7 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
       rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
     } else if (Platform.isAndroid) {
       final deviceOrientation = _cameraController?.value.deviceOrientation;
-      int? rotationCompensation =
-          (deviceOrientation != null) ? _orientations[deviceOrientation] : null;
+      int? rotationCompensation = (deviceOrientation != null) ? _orientations[deviceOrientation] : null;
       if (rotationCompensation == null) return;
       rotationCompensation = (sensorOrientation + rotationCompensation) % 360;
       rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
@@ -160,16 +166,93 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
 
     final List<Face> faces = await _faceDetector.processImage(inputImage);
     if (faces.length == 1) {
-      final originalImage = cameraImageToImage(image);
+      // final originalImage = cameraImageToImage(image);
+
+      final Uint8List data = image.planes[0].bytes;
+      final int width = image.width;
+      final int height = image.height;
+      final int bytesPerRow = image.planes[0].bytesPerRow;
+
+      final Map<String, dynamic> args = {
+        'data': data,
+        'width': width,
+        'height': height,
+        'bytesPerRow': bytesPerRow,
+      };
+
       _onnxChannel.invokeMethod(
         'processImage',
-        {
-          'image': Uint8List.fromList(img.encodeJpg(originalImage)),
-        },
+        args,
       );
     }
 
     _isBusy = false;
+  }
+
+  Float32List convertCameraImageToOnnxTensor(CameraImage image) {
+    final int width = image.width;
+    final int height = image.height;
+
+    // Create a Float32List to hold our tensor data (3 channels, channel-first order).
+    final int tensorSize = 3 * width * height;
+    final Float32List tensor = Float32List(tensorSize);
+
+    // Retrieve the Y, U, and V planes.
+    final Plane planeY = image.planes[0];
+    final Plane planeU = image.planes[1];
+    final Plane planeV = image.planes[2];
+
+    final int yRowStride = planeY.bytesPerRow;
+    final int uvRowStride = planeU.bytesPerRow;
+    final int uvPixelStride = planeU.bytesPerPixel ?? 1; // Usually 2, but default to 1 if null
+
+    // Loop over every pixel.
+    for (int row = 0; row < height; row++) {
+      for (int col = 0; col < width; col++) {
+        // --- Get the Y value for the current pixel ---
+        final int yIndex = row * yRowStride + col;
+        final int Y = planeY.bytes[yIndex];
+
+        // --- Get the U and V values (subsampled: one value per 2x2 block) ---
+        final int uvRow = row ~/ 2;
+        final int uvCol = col ~/ 2;
+        final int uvIndex = uvRow * uvRowStride + uvCol * uvPixelStride;
+        final int U = planeU.bytes[uvIndex];
+        final int V = planeV.bytes[uvIndex];
+
+        // Convert YUV to RGB.
+        // Note: U and V are offset by 128.
+        double yVal = Y.toDouble();
+        double uVal = U.toDouble() - 128.0;
+        double vVal = V.toDouble() - 128.0;
+
+        double r = yVal + 1.402 * vVal;
+        double g = yVal - 0.344136 * uVal - 0.714136 * vVal;
+        double b = yVal + 1.772 * uVal;
+
+        // Clamp RGB values to [0, 255].
+        r = r.clamp(0.0, 255.0);
+        g = g.clamp(0.0, 255.0);
+        b = b.clamp(0.0, 255.0);
+
+        // Normalize values to [0, 1].
+        double rNorm = r / 255.0;
+        double gNorm = g / 255.0;
+        double bNorm = b / 255.0;
+
+        // Place the normalized values into the tensor.
+        // Assuming channel-first order: [1, 3, height, width]
+        int indexR = 0 * (width * height) + row * width + col;
+        int indexG = 1 * (width * height) + row * width + col;
+        int indexB = 2 * (width * height) + row * width + col;
+
+        tensor[indexR] = rNorm;
+        tensor[indexG] = gNorm;
+        tensor[indexB] = bNorm;
+      }
+    }
+
+    return tensor;
   }
 
   img.Image cameraImageToImage(CameraImage cameraImage) {
@@ -237,8 +320,7 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
       final arguments = call.arguments as Map<dynamic, dynamic>;
 
       final ambientIntensity = arguments['ambientIntensity'] as double;
-      final ambientColorTemperature =
-          arguments['ambientColorTemperature'] as double;
+      final ambientColorTemperature = arguments['ambientColorTemperature'] as double;
 
       setState(() {
         _ambientIntensity = ambientIntensity;
@@ -262,9 +344,7 @@ class _FaceTrackingPageState extends State<FaceTrackingPage> {
         child: Stack(
           children: [
             // const ARCameraView(),
-            if (_cameraController != null &&
-                _cameraController!.value.isInitialized)
-              CameraPreview(_cameraController!),
+            if (_cameraController != null && _cameraController!.value.isInitialized) CameraPreview(_cameraController!),
             Align(
               alignment: Alignment.topCenter,
               child: Padding(
